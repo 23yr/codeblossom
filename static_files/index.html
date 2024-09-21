@@ -1,0 +1,230 @@
+
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8" />
+    <title>CodeBlossom</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #ffffff;
+            background-image: radial-gradient(rgba(12, 12, 12, 0.171) 2px, transparent 0);
+            background-size: 30px 30px;
+            background-position: -5px -5px;
+        }
+        
+        table, td, th {
+            border-collapse: collapse;
+            border:1px solid #ddd;
+        }
+
+        .container {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        strong {
+            font-size: 1.1em;
+            color: #2c3e50;
+        }
+
+        input[type="file"], textarea, button {
+            width: 100%;
+            max-width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+
+        input[type="radio"] {
+            margin-right: 10px;
+        }
+
+        details {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+
+        summary {
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #submit {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+
+        #submit:hover {
+            background-color: #2980b9;
+        }
+
+        #prompt_templates {
+            display: flex;
+            justify-content: center;
+        }
+
+        #response {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+
+        #elapsed {
+            text-align: center;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+
+            textarea {
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        let startTime;
+        let interval;
+
+        async function submit(){
+            const fileInput = document.getElementById("file");
+            const file = fileInput.files[0];
+            const models = document.getElementsByName("model_name");
+            const system_prompt = document.getElementById("system_prompt").value;
+            const prompt = document.getElementById("prompt").value;
+            const submit = document.getElementById("submit");
+            const responseText = document.getElementById("response");
+
+            if(!file){
+                alert("please select a zip file.");
+                return;
+            }
+
+            responseText.textContent = "";
+
+            submit.disabled = true;
+            startTime = new Date();
+            interval = setInterval(updateElapsedTime, 100);
+
+            let model_name = "";
+            for(let i = 0; i < models.length; i++){
+                if(models.item(i).checked){
+                    model_name = models.item(i).value;
+                }
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('model_name', model_name);
+            formData.append('system_prompt', system_prompt)
+            formData.append('prompt', prompt)
+
+            try {
+                const response = await fetch('https://asia-northeast1-genai-test-391311.cloudfunctions.net/c-noah-hackathon-codeblossom', {
+                    method: 'POST',
+                    body: formData
+                });
+                if(!response.ok) {
+                    throw new Error('Not 200.');
+                    responseText.value = "Not 200.";
+                }
+                const result = await response.json();
+                responseText.innerHTML = marked.parse(result["response"]);
+            } catch (error) {
+                console.error(error);
+                responseText.value = "Error. please check the console.";
+            }
+
+            clearInterval(interval);
+            submit.disabled = false;
+        }
+
+        function updateElapsedTime(){
+            document.getElementById("elapsed").textContent = Math.floor((((new Date()) - startTime) / 1000) * 10) / 10 + "s";
+        }
+
+        function model_changed(){
+            let models = document.getElementsByName("model_name");
+            let system_prompt_div = document.getElementById("system_prompt_div");
+            let model_name = "";
+            for(let i = 0; i < models.length; i++){
+                if(models.item(i).checked){
+                    model_name = models.item(i).value;
+                }
+            }
+            if(model_name == "gemini-1.5-pro-001"){
+                system_prompt_div.style.display = "block";
+            }else if(model_name == "claude-3-5-sonnet@20240620"){
+                system_prompt_div.style.display = "none";
+            }
+        }
+
+        function selectPromptTemplate(self){
+            const templates = ["このソースコードのテストケースを下記【要件】に従って作成してください。\n\n【要件】\n・テストケースの概要を表示する。\n・テストケースの項目は【テストケース表の項目】とし、表示は表形式とする。\n・テストケース表の項目の「テストケース種類」は【テストケース種類】の全てを網羅するものとする。\n・テストケース表の項目の「テスト観点」は【テスト観点】の全てを網羅するものとする。\n・ステートメントカバレッジが100%網羅されるようにテストケースを設計してください。つまり、全ての命令が少なくとも1回は実行されるようにテストケースを設計してください。\n・ブランチカバレッジが100%分岐網羅されるようにテストケースを設計してください。つまり、全ての条件分岐(true, false)の経路が実行されるようにテストケースを設計してください。\n\n【テストケース表の項目】\n・No.\n・テスト対象・画面\n・テスト対象・項目\n・テスト観点\n・テストケース種類\n・確認内容\n・テスト条件\n・テスト手順\n・期待値\n\n【テストケース種類】\n・正常ケース\n・異常ケース\n・境界ケース\n\n【テスト観点】\n・機能性: 仕様通りの機能が正しく動作するかを確認。画面状態遷移確認、再実行時の多重入力防止等を含む。\n・入力範囲: 正常値、境界値、異常値を含む様々な入力に対する動作を確認。\n・出力検証: 期待される出力が正しく生成されるかを確認。\n・エラー処理: 想定外の入力や異常な状況に対して適切にエラーを処理するかを確認。\n・例外処理: 例外が発生した場合の処理が正しいかを確認。（エラー時のロールバック等）\n・パフォーマンス: 実行速度やリソースの消費が許容範囲内かを確認。\n・メモリ管理: メモリリークや不正なメモリアクセスがないかを確認。\n・セキュリティ: セキュリティホールや不正アクセスがないかを確認。\n・互換性: 他のモジュールやシステムと適切に連携できるかを確認。\n・再現性: 同じテストケースが一貫して同じ結果を出すかを確認。\n・ドキュメント整合性: コードとドキュメントが一致しているかを確認。\n・境界条件: 境界条件や極端な状況での動作を確認。\n・ユーザーインターフェース: ユーザーインターフェースが仕様通りに動作するかを確認。\n・依存関係: 他のモジュールや外部ライブラリとの依存関係が正しく管理されているかを確認。\n・データベースアクセス: データベースへのアクセスが正しく行われるかを確認。\n・タイミング: 時間に依存する処理が正しく行われるかを確認。\n・競合状態: 同時実行やリソースの競合が適切に処理されているかを確認。排他制御等を含む。\n", "このソースコードで、エラーが発生する不正なコードが書かれている箇所についての内容を、下記【要件】に従って作成してください。\n\n【要件】\n・エラー発生するコードの表の項目は【エラー発生するコードの表の項目】とし、表示は表形式とする。\n・エラーが発生する不正なコードが書かれている箇所が1個もない場合は、表は表示せずに、エラーが発生する不正なコードがないことを記載する。\n\n【エラー発生するコードの表の項目】\n・ファイル名\n・行番号\n・発生するException\n・エラー内容\n・修正方法\n"];
+            document.getElementById("prompt").value = templates[parseInt(self.value)];
+        }
+    </script>
+    <div class="container">
+        <br><div style="text-align: center;"><img src="https://storage.googleapis.com/c-noah-hackathon-codeblossom/logo.png" height="25%" width="25%"></div><br><br><br>
+        <strong>ZIPファイル:</strong><br>
+        <input type="file" id="file" accept=".zip"><br><br>
+        <strong>モデル:</strong><br>
+        <input type="radio" name="model_name" value="gemini-1.5-pro-001" onchange="model_changed()" checked> Gemini 1.5 Pro
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type="radio" name="model_name" value="claude-3-5-sonnet@20240620" onchange="model_changed()"> Claude 3.5 Sonnet
+        <br><br>
+
+        <br><strong>プロンプトテンプレート:</strong><br>
+        <div id="prompt_templates">
+            <button onclick="selectPromptTemplate(this)" value="0" style="border-radius: 8px 0px 0px 8px; cursor: pointer; background-color: #FFF;" onMouseOut="this.style.background='#FFF';" onMouseOver="this.style.background='#EEE'">テストケース生成プロンプト</button>
+            <button onclick="selectPromptTemplate(this)" value="1" style="border-radius: 0px 8px 8px 0px; cursor: pointer; background-color: #FFF;" onMouseOut="this.style.background='#FFF';" onMouseOver="this.style.background='#EEE'">エラー指摘プロンプト</button>
+        </div>
+        <br><br>
+
+        <div id="system_prompt_div">
+            <strong>System Instruction:</strong><br>
+            <textarea id="system_prompt" rows="5"></textarea>
+        </div>
+        <br><strong>質問:</strong><br>
+        <textarea id="prompt" rows="20"></textarea><br>
+        <button onclick="submit()" id="submit">送信</button><p id="elapsed"></p><br><br>
+        <strong>回答:</strong>
+        <div id="response"></div>
+    </div>
+</body>
+</html>
